@@ -156,7 +156,7 @@ export default function Dashboard() {
           <div>
             {timeLeft && (
               <div className={`timer-container ${timeLeft === "00:00:00" ? "timer-danger" : ""}`}>
-                <div className="timer-label">⏱ Time Remaining</div>
+                <div className="timer-label">Time Remaining</div>
                 <div className="timer-display">{timeLeft}</div>
               </div>
             )}
