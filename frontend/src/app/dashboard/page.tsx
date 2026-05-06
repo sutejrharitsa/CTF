@@ -217,7 +217,7 @@ export default function Dashboard() {
                       <div style={{ display: "flex", gap: "0.5rem" }}>
                         <input 
                           type="text" 
-                          placeholder="CTF{...}" 
+                          placeholder="flag{...}" 
                           value={flags[c.id] || ""} 
                           onChange={(e) => setFlags({ ...flags, [c.id]: e.target.value })}
                           style={{ marginBottom: 0 }}
