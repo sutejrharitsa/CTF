@@ -4,6 +4,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "../../apiConfig";
 
+interface Submission {
+  id: number;
+  user_id: number;
+  challenge_id: number;
+  timestamp: string;
+  is_correct: boolean;
+  submitted_flag: string;
+  username: string;
+  challenge_title: string;
+  challenge_points: number;
+}
+
 export default function AdminDashboard() {
   const [isActive, setIsActive] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState(60);
@@ -11,6 +23,10 @@ export default function AdminDashboard() {
   const [newChallenge, setNewChallenge] = useState({ title: "", description: "", points: 100, flag: "", trim_spaces: false, ignore_case: false });
   const [selectedFile, setSelectedFile] = useState<FileList | null>(null);
   const [error, setError] = useState("");
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [showSubmissions, setShowSubmissions] = useState(false);
+  const [submissionFilter, setSubmissionFilter] = useState<number | "all">("all");
+  const [overrideLoading, setOverrideLoading] = useState<number | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -22,6 +38,7 @@ export default function AdminDashboard() {
     }
     fetchState();
     fetchChallenges();
+    fetchSubmissions();
   }, []);
 
   const fetchState = async () => {
@@ -37,6 +54,16 @@ export default function AdminDashboard() {
     });
     if (res.ok) {
       setChallenges(await res.json());
+    }
+  };
+
+  const fetchSubmissions = async () => {
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${API_BASE_URL}/api/admin/submissions`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      setSubmissions(await res.json());
     }
   };
 
@@ -119,6 +146,7 @@ export default function AdminDashboard() {
       headers: { Authorization: `Bearer ${token}` }
     });
     alert("Leaderboard cleared.");
+    fetchSubmissions();
   };
 
   const clearUsers = async () => {
@@ -129,6 +157,27 @@ export default function AdminDashboard() {
       headers: { Authorization: `Bearer ${token}` }
     });
     alert("All users cleared.");
+    fetchSubmissions();
+  };
+
+  const overrideSubmission = async (submissionId: number, newIsCorrect: boolean) => {
+    setOverrideLoading(submissionId);
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${API_BASE_URL}/api/admin/submissions/${submissionId}/override`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ is_correct: newIsCorrect })
+    });
+    if (res.ok) {
+      fetchSubmissions();
+    } else {
+      const data = await res.json();
+      setError(data.detail || "Failed to override submission");
+    }
+    setOverrideLoading(null);
   };
 
   const logout = () => {
@@ -136,12 +185,21 @@ export default function AdminDashboard() {
     router.push("/admin");
   };
 
+  // Group submissions by challenge for the filter
+  const challengeIds = [...new Set(submissions.map(s => s.challenge_id))];
+  const filteredSubmissions = submissionFilter === "all"
+    ? submissions
+    : submissions.filter(s => s.challenge_id === submissionFilter);
+
   return (
     <div>
       <div className="nav-bar">
         <h2>Admin Dashboard [root]</h2>
         <div className="nav-links">
           <Link href="/leaderboard">Leaderboard</Link>
+          <button onClick={() => { setShowSubmissions(!showSubmissions); if (!showSubmissions) fetchSubmissions(); }} style={{ padding: "0.4rem 1rem" }}>
+            {showSubmissions ? "Hide Submissions" : "View Submissions"}
+          </button>
           <button onClick={logout} style={{ padding: "0.4rem 1rem" }}>Logout</button>
         </div>
       </div>
@@ -166,7 +224,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          <div style={{ marginTop: "1rem", display: "flex", gap: "1rem" }}>
+          <div style={{ marginTop: "1rem", display: "flex", gap: "1rem", flexWrap: "wrap" }}>
             <button onClick={toggleState}>
               {isActive ? "Deactivate Contest" : "Activate Contest"}
             </button>
@@ -178,6 +236,112 @@ export default function AdminDashboard() {
             </button>
           </div>
         </div>
+
+        {/* ===== SUBMISSIONS PANEL ===== */}
+        {showSubmissions && (
+          <div className="card" style={{ marginBottom: "2rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
+              <h3 style={{ margin: 0 }}>📋 All Submissions</h3>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <label style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>Filter by Challenge:</label>
+                <select
+                  value={submissionFilter}
+                  onChange={(e) => setSubmissionFilter(e.target.value === "all" ? "all" : parseInt(e.target.value))}
+                  style={{ width: "auto", marginBottom: 0, padding: "0.4rem 0.6rem", fontSize: "0.85rem" }}
+                >
+                  <option value="all">All Challenges</option>
+                  {challengeIds.map(id => {
+                    const sub = submissions.find(s => s.challenge_id === id);
+                    return (
+                      <option key={id} value={id}>
+                        {sub?.challenge_title || `Challenge #${id}`}
+                      </option>
+                    );
+                  })}
+                </select>
+                <button onClick={fetchSubmissions} style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}>
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {filteredSubmissions.length === 0 ? (
+              <p style={{ color: "var(--text-dim)", textAlign: "center", padding: "2rem 0" }}>No submissions found.</p>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "5%" }}>#</th>
+                      <th style={{ width: "15%" }}>Student</th>
+                      <th style={{ width: "15%" }}>Challenge</th>
+                      <th style={{ width: "25%" }}>Submitted Flag</th>
+                      <th style={{ width: "10%" }}>Result</th>
+                      <th style={{ width: "15%" }}>Time</th>
+                      <th style={{ width: "15%" }}>Override</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSubmissions.map((sub, idx) => (
+                      <tr key={sub.id} style={sub.is_correct ? { background: "rgba(0, 255, 65, 0.05)" } : {}}>
+                        <td style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>{sub.id}</td>
+                        <td>{sub.username}</td>
+                        <td>
+                          <span style={{ fontSize: "0.85rem" }}>{sub.challenge_title}</span>
+                          <br />
+                          <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>{sub.challenge_points} pts</span>
+                        </td>
+                        <td>
+                          <code style={{
+                            background: "rgba(0,0,0,0.4)",
+                            padding: "0.2rem 0.4rem",
+                            borderRadius: "3px",
+                            fontSize: "0.85rem",
+                            wordBreak: "break-all",
+                            border: "1px solid var(--border-color)"
+                          }}>
+                            {sub.submitted_flag || "(empty)"}
+                          </code>
+                        </td>
+                        <td>
+                          <span className={sub.is_correct ? "badge badge-active" : "badge badge-inactive"} style={{ fontSize: "0.75rem" }}>
+                            {sub.is_correct ? "✓ CORRECT" : "✗ WRONG"}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: "0.8rem" }}>
+                          {new Date(sub.timestamp).toLocaleString()}
+                        </td>
+                        <td>
+                          {overrideLoading === sub.id ? (
+                            <span style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>Saving...</span>
+                          ) : (
+                            <button
+                              onClick={() => overrideSubmission(sub.id, !sub.is_correct)}
+                              style={{
+                                padding: "0.3rem 0.6rem",
+                                fontSize: "0.75rem",
+                                borderColor: sub.is_correct ? "var(--error-color)" : "var(--text-color)",
+                                color: sub.is_correct ? "var(--error-color)" : "var(--text-color)",
+                              }}
+                              title={sub.is_correct ? "Mark as WRONG" : "Mark as CORRECT"}
+                            >
+                              {sub.is_correct ? "Mark Wrong" : "Mark Correct"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div style={{ marginTop: "1rem", fontSize: "0.8rem", color: "var(--text-dim)", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
+              <span>Total: {filteredSubmissions.length} submission{filteredSubmissions.length !== 1 ? "s" : ""}</span>
+              <span>Correct: {filteredSubmissions.filter(s => s.is_correct).length} | Wrong: {filteredSubmissions.filter(s => !s.is_correct).length}</span>
+            </div>
+          </div>
+        )}
 
         <div className="grid">
           <div className="card">

@@ -306,11 +306,46 @@ def submit_flag(challenge_id: int, req: FlagSubmit, user: dict = Depends(get_cur
             
         is_correct = (submitted_flag == correct_flag)
         
-        cursor.execute("INSERT INTO submission (user_id, challenge_id, is_correct) VALUES (?, ?, ?)", 
-                       (user_id, challenge_id, is_correct))
+        cursor.execute("INSERT INTO submission (user_id, challenge_id, is_correct, submitted_flag) VALUES (?, ?, ?, ?)", 
+                       (user_id, challenge_id, is_correct, req.flag))
         db.commit()
         
         return {"is_correct": is_correct}
+
+# --- Admin Submissions Endpoints ---
+
+class SubmissionOverride(BaseModel):
+    is_correct: bool
+
+@app.get("/api/admin/submissions")
+def get_all_submissions(_: dict = Depends(get_admin_user)):
+    """Get all submissions grouped by challenge, with username and submitted flag."""
+    with get_db() as db:
+        cursor = db.cursor()
+        cursor.execute('''
+            SELECT s.id, s.user_id, s.challenge_id, s.timestamp, s.is_correct, s.submitted_flag,
+                   u.username, c.title as challenge_title, c.points as challenge_points
+            FROM submission s
+            JOIN user u ON s.user_id = u.id
+            JOIN challenge c ON s.challenge_id = c.id
+            ORDER BY c.id ASC, s.timestamp DESC
+        ''')
+        results = [dict(row) for row in cursor.fetchall()]
+        return results
+
+@app.put("/api/admin/submissions/{submission_id}/override")
+def override_submission(submission_id: int, req: SubmissionOverride, _: dict = Depends(get_admin_user)):
+    """Manually override a specific submission's correctness."""
+    with get_db() as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT * FROM submission WHERE id = ?", (submission_id,))
+        submission = cursor.fetchone()
+        if not submission:
+            raise HTTPException(status_code=404, detail="Submission not found")
+        
+        cursor.execute("UPDATE submission SET is_correct = ? WHERE id = ?", (req.is_correct, submission_id))
+        db.commit()
+        return {"message": "Submission overridden successfully", "new_is_correct": req.is_correct}
 
 @app.get("/api/leaderboard")
 def get_leaderboard():

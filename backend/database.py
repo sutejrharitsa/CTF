@@ -52,10 +52,17 @@ def init_db():
         challenge_id INTEGER NOT NULL,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         is_correct BOOLEAN NOT NULL,
+        submitted_flag TEXT DEFAULT '',
         FOREIGN KEY(user_id) REFERENCES user(id),
         FOREIGN KEY(challenge_id) REFERENCES challenge(id)
     )
     ''')
+    
+    # Migration: add submitted_flag column if missing (for existing DBs)
+    try:
+        cursor.execute("ALTER TABLE submission ADD COLUMN submitted_flag TEXT DEFAULT ''")
+    except Exception:
+        pass  # Column already exists
     
     conn.commit()
     conn.close()
