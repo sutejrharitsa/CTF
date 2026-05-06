@@ -241,7 +241,7 @@ export default function AdminDashboard() {
         {showSubmissions && (
           <div className="card" style={{ marginBottom: "2rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
-              <h3 style={{ margin: 0 }}>📋 All Submissions</h3>
+              <h3 style={{ margin: 0 }}>All Submissions</h3>
               <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                 <label style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>Filter by Challenge:</label>
                 <select
